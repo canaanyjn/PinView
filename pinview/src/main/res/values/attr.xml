@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="PinView">
+        <attr name="rowNumber" format="integer"/>
+        <attr name="colummNumber" format="integer"/>
+        <attr name="cellRadius" format="float"/>
+        <attr name="cellColor" format="color"/>
+        <attr name="pathColor" format="color"/>
+        <attr name="pathWidth" format="float"/>
+    </declare-styleable>
+</resources>
