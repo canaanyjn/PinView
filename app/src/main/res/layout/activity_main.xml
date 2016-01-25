@@ -17,7 +17,9 @@
         app:cellColor="#333333"
         app:cellRadius="30"
         app:pathColor="#333333"
+        app:errorColor="#aaaaaa"
         app:pathWidth="10"
+        app:key=" 1 2 3"
         />
 
 </RelativeLayout>

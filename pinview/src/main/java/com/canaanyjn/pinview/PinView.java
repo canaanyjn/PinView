@@ -7,6 +7,8 @@ import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.os.Handler;
+import android.os.Message;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -15,6 +17,8 @@ import android.view.animation.AccelerateDecelerateInterpolator;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 /**
  * Created by canaan on 2015/9/23 0023.
@@ -23,27 +27,48 @@ public class PinView extends View {
     private static final String TAG = PinView.class.getSimpleName();
     private Paint cellPaint;
     private Paint pathPaint;
+    private Paint errorPaint;
     private CellManager mCellManager;
     private List<Integer> choosedCellNum;
 
     private ValueAnimator mCellChoosedAnimation;
+    private ValueAnimator mErrorAnimation;
 
     private int width,height;
     private float rowDistance;
     private float colummDistance;
     private float lastX,lastY;
     private boolean isReleased = true;
+    private boolean isError = false;
 
     private int cellRowNumber = 3;
     private int cellColummNumber = 3;
     private float cellRadius = 20;
     private int cellColor;
+    //TODO:add th attr
+    private int errorColor;
     private int mLastChoosedCell = -1,midChoosedCell = -1;
     private float choosedCellRadius;
     private float choosedCellX,choosedCellY;
+    private String key;
+    final int END = 102;
+
 
     private int pathColor;
     private float pathWidth;
+
+
+    final Handler handler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case END:
+                    solveError();
+            }
+        }
+    };
+    TimerTask task;
+    Timer timer;
 
     public PinView(Context context) {
         super(context);
@@ -72,8 +97,10 @@ public class PinView extends View {
         if (attrs != null) {
             TypedArray typedArray = getContext().obtainStyledAttributes(attrs, R.styleable.PinView,0,0);
             cellRowNumber = typedArray.getInteger(R.styleable.PinView_rowNumber, 3);
-            cellColummNumber = typedArray.getInteger(R.styleable.PinView_colummNumber,3);
-            cellColor = typedArray.getColor(R.styleable.PinView_cellColor,Color.BLACK);
+            key = typedArray.getString(R.styleable.PinView_key);
+            cellColummNumber = typedArray.getInteger(R.styleable.PinView_colummNumber, 3);
+            cellColor = typedArray.getColor(R.styleable.PinView_cellColor, Color.BLACK);
+            errorColor = typedArray.getColor(R.styleable.PinView_errorColor,Color.YELLOW);
             cellRadius = typedArray.getFloat(R.styleable.PinView_cellRadius, 20.0f);
             pathColor = typedArray.getColor(R.styleable.PinView_pathColor,Color.BLACK);
             pathWidth = typedArray.getFloat(R.styleable.PinView_pathWidth,10.0f);
@@ -92,6 +119,10 @@ public class PinView extends View {
         cellPaint.setStyle(Paint.Style.FILL);
         cellPaint.setAntiAlias(true);
 
+        errorPaint = new Paint();
+        errorPaint.setColor(errorColor);
+        errorPaint.setStyle(Paint.Style.FILL);
+        errorPaint.setAntiAlias(true);
     }
 
     private void initPathPaint() {
@@ -128,12 +159,20 @@ public class PinView extends View {
 
         for (int i = 0;i<mCells.size();i++) {
             Cell cell = mCells.get(i);
-            if (i == mLastChoosedCell) {
+            if (!isError && i == mLastChoosedCell) {
                 canvas.drawCircle(cell.getX(), cell.getY(), choosedCellRadius, cellPaint);
-            } else if (i == midChoosedCell) {
+            } else if (!isError && i == midChoosedCell) {
                 canvas.drawCircle(cell.getX(), cell.getY(), choosedCellRadius, cellPaint);
             } else{
                 canvas.drawCircle(cell.getX(), cell.getY(), cellRadius, cellPaint);
+            }
+        }
+
+        //if error,draw the error ball
+        if (isError){
+            for (int i = 0;i<choosedCellNum.size();i++) {
+                Cell cell = mCells.get(choosedCellNum.get(i));
+                canvas.drawCircle(cell.getX(),cell.getY(),cellRadius,errorPaint);
             }
         }
 
@@ -143,8 +182,10 @@ public class PinView extends View {
                 Cell cellB = mCells.get(choosedCellNum.get(j+1));
                 canvas.drawLine(cellA.getX(),cellA.getY(),cellB.getX(),cellB.getY(),pathPaint);
             }
-            Cell cell = mCells.get(choosedCellNum.get(choosedCellNum.size()-1));
-            canvas.drawLine(cell.getX(),cell.getY(),lastX,lastY,pathPaint);
+            if (!isError) {
+                Cell cell = mCells.get(choosedCellNum.get(choosedCellNum.size()-1));
+                canvas.drawLine(cell.getX(),cell.getY(),lastX,lastY,pathPaint);
+            }
         }
 
     }
@@ -156,9 +197,12 @@ public class PinView extends View {
         float y = event.getY();
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
+                if (isError) {
+                    solveError();
+                }
                 mLastChoosedCell = mCellManager.setDownPosition(x,y);
                 if (mLastChoosedCell != -1) {
-                    startAnimation();
+                    startChoosedAnimation();
                     choosedCellNum.add(mLastChoosedCell);
                 }
                 break;
@@ -178,7 +222,7 @@ public class PinView extends View {
                         }
                         Log.d(TAG, "midChoosedCell--->" + midChoosedCell);
                         choosedCellNum.add(mLastChoosedCell);
-                        startAnimation();
+                        startChoosedAnimation();
 
                     } else {
                         invalidate();
@@ -186,9 +230,14 @@ public class PinView extends View {
                 }
                 break;
             case MotionEvent.ACTION_UP:
-                isReleased = true;
-                invalidate();
-                choosedCellNum.clear();
+                if (!getPinString().equals(key)) {
+                    isError = true;
+                    startErrorAnimation();
+                } else {
+                    isReleased = true;
+                    choosedCellNum.clear();
+                    invalidate();
+                }
                 break;
         }
         return true;
@@ -213,7 +262,7 @@ public class PinView extends View {
         for (int i = 0;i<choosedCellNum.size();i++) {
             result = result + " " + choosedCellNum.get(i);
         }
-        Log.d(TAG,"result--->"+result);
+        Log.d(TAG, "result--->" + result);
         return result;
     }
 
@@ -247,7 +296,34 @@ public class PinView extends View {
         });
     }
 
-    private void startAnimation() {
+    private void solveError() {
+        isReleased = true;
+        isError = false;
+        pathPaint.setColor(pathColor);
+        choosedCellNum.clear();
+        invalidate();
+        timer.cancel();
+        task.cancel();
+    }
+
+    private void startErrorAnimation() {
+        pathPaint.setColor(errorColor);
+
+        //error last for one second
+        timer = new Timer();
+        task  = new TimerTask() {
+            @Override
+            public void run() {
+                Message message = new Message();
+                message.what = END;
+                handler.sendMessage(message);
+            }
+        };
+        timer.schedule(task,1000);
+
+    }
+
+    private void startChoosedAnimation() {
         mCellChoosedAnimation.start();
     }
 

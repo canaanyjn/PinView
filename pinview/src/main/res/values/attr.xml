@@ -6,6 +6,8 @@
         <attr name="cellRadius" format="float"/>
         <attr name="cellColor" format="color"/>
         <attr name="pathColor" format="color"/>
+        <attr name="errorColor" format="color"/>
         <attr name="pathWidth" format="float"/>
+        <attr name="key" format="string"/>
     </declare-styleable>
 </resources>
